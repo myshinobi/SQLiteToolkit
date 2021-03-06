@@ -14,6 +14,7 @@ namespace SQLiteToolkit
         public TimeSpan timeSpanElapsed;
         public DateTime timeFinishedUTC;
         public Exception exception;
+        public object ScalarObject;
         public bool Failed 
         { 
             get

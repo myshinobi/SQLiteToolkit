@@ -38,7 +38,8 @@ namespace SQLiteToolkit
         public enum QueryType
         {
             Execute = 0,
-            Select = 1
+            Select = 1,
+            Scalar
         }
 
         //public enum QueryState

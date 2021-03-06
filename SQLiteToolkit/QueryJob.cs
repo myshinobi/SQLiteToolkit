@@ -65,6 +65,12 @@ namespace SQLiteToolkit
             return null;
         }
 
+        public QueryJob RunNow()
+        {
+            DoQueryJob();
+            return this;
+        }
+
         private void DoQueryJob()
         {
             DateTime startTimeUTC = DateTime.UtcNow;
@@ -82,6 +88,18 @@ namespace SQLiteToolkit
                     case Query.QueryType.Select:
                         DataTable table = GetDataTable(query.queryString);
                         result.datatable = table;
+                        if (table.Rows.Count > 0)
+                        {
+                            if (table.Columns.Count > 0)
+                            {
+                                result.ScalarObject = table.Rows[0][0];
+                            }
+                        }
+                        break;
+                    case Query.QueryType.Scalar:
+
+                        object obj = query.GetCommand(database.myConnection).ExecuteScalar();
+                        result.ScalarObject = obj;
                         break;
                     default:
                         break;
@@ -98,7 +116,10 @@ namespace SQLiteToolkit
 
             result.timeSpanElapsed = (result.timeFinishedUTC - startTimeUTC);
             database.DoOnDatabaseMessage(new DatabaseMessageEventArgs(this));
-            onFinished(this);
+            if (onFinished != null)
+            {
+                onFinished(this);
+            }
         }
     }
 }

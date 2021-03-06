@@ -155,19 +155,29 @@ namespace SQLiteToolkit
             Label label = GetControlsOfType<Label>(splitContainer.Panel2).First();
             StatusStrip statusStrip = GetControlsOfType<StatusStrip>(splitContainer.Panel2).First();
             ToolStripStatusLabel statusLabel = (ToolStripStatusLabel)statusStrip.Items[0];
-            statusLabel.Text = "00:00:00 Time Elapsed";
             string queryString = textBox.Text;
-            
+            RegisterTimerLabel(statusLabel, DateTime.UtcNow);
             Query query = database.NewQuery(queryString);
 
-            database.RunQuery(query, (job) => ShowQueryResults(dataGridView, label, job));
+            database.RunQuery(query, (job) => ShowQueryResults(dataGridView, label, statusLabel, job));
+        }
+        
+        public string GetTimeElapsedText(DateTime startTimeUTC)
+        {
+            TimeSpan span = (DateTime.UtcNow - startTimeUTC);
+
+            return span.ToString() + " Time Elapsed";
         }
 
         public void RegisterTimerLabel(ToolStripStatusLabel label, DateTime startTimeUTC)
         {
-            if (TimeElapsedLabels.ContainsKey(label) == false)
+            lock (TimeElapsedLabels)
             {
-                TimeElapsedLabels.Add(label, startTimeUTC);
+
+                if (TimeElapsedLabels.ContainsKey(label) == false)
+                {
+                    TimeElapsedLabels.Add(label, startTimeUTC);
+                }
             }
 
 
@@ -175,22 +185,28 @@ namespace SQLiteToolkit
 
         public void UnRegisterTimerLabel(ToolStripStatusLabel label)
         {
-            if (TimeElapsedLabels.ContainsKey(label))
+            lock (TimeElapsedLabels)
             {
-                TimeElapsedLabels.Remove(label);
+
+                if (TimeElapsedLabels.ContainsKey(label))
+                {
+                    TimeElapsedLabels.Remove(label);
+                }
             }
         }
 
         public Dictionary<ToolStripStatusLabel, DateTime> TimeElapsedLabels = new Dictionary<ToolStripStatusLabel, DateTime>();
 
-        delegate void ShowQueryResultsInvoker(DataGridView dataGridView, Label databaseMessage, QueryJob queryJob);
-        private void ShowQueryResults(DataGridView dataGridView, Label databaseMessage, QueryJob queryJob)
+        delegate void ShowQueryResultsInvoker(DataGridView dataGridView, Label databaseMessage, ToolStripStatusLabel statusLabel, QueryJob queryJob);
+        private void ShowQueryResults(DataGridView dataGridView, Label databaseMessage, ToolStripStatusLabel statusLabel, QueryJob queryJob)
         {
             if (InvokeRequired)
             {
-                this.Invoke(new ShowQueryResultsInvoker(ShowQueryResults), dataGridView, databaseMessage, queryJob);
+                this.Invoke(new ShowQueryResultsInvoker(ShowQueryResults), dataGridView, databaseMessage, statusLabel, queryJob);
                 return;
             }
+            UpdateStatusLabelTimeElapsed(statusLabel);
+            UnRegisterTimerLabel(statusLabel);
             if (queryJob.result.Failed)
             {
 
@@ -225,10 +241,10 @@ namespace SQLiteToolkit
 
         //    return textBox.Text;
         //}
-        public static IEnumerable<T> GetControlsOfType<T>(IEnumerable<object> items) where T: Control
-        {
+        //public static IEnumerable<T> GetControlsOfType<T>(IEnumerable<object> items) where T: Control
+        //{
 
-        }
+        //}
 
         public static IEnumerable<T> GetControlsOfType<T>(Control root)
     where T : Control
@@ -273,7 +289,21 @@ namespace SQLiteToolkit
 
         private void timer1_Tick(object sender, EventArgs e)
         {
+            lock (TimeElapsedLabels)
+            {
+                foreach (ToolStripStatusLabel statusLabel in TimeElapsedLabels.Keys)
+                {
+                    statusLabel.Text = GetTimeElapsedText(TimeElapsedLabels[statusLabel]);
+                }
+            }
+        }
 
+        private void UpdateStatusLabelTimeElapsed(ToolStripStatusLabel statusLabel)
+        {
+            lock (TimeElapsedLabels)
+            {
+                statusLabel.Text = GetTimeElapsedText(TimeElapsedLabels[statusLabel]);
+            }
         }
     }
 }
