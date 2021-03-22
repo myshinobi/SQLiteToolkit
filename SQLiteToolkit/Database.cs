@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.Linq;
 using System.Threading;
 
 namespace SQLiteToolkit
@@ -150,6 +151,69 @@ namespace SQLiteToolkit
 
             return command;
         }
+
+        public bool RecordExists(IIndexableRecordConverter obj)
+        {
+            if (!obj.IsIndexed)
+                return false;
+
+            return RecordExists(obj.TableName, new KeyValuePair<Column, object>[] { new KeyValuePair<Column, object>(obj.IndexColumn, obj.Id)});
+        }
+
+        public bool RecordExists(string tablename, params KeyValuePair<Column, object>[] values)
+        {
+            string sql = "SELECT count(1) FROM "+tablename+ " WHERE "+string.Join(" AND ", values.Select(x => x.Key.GetSQLValue(x.Value)));
+
+            Query query = new Query(sql);
+            bool exists = false;
+            RunQuery(query, (job) =>
+            {
+                exists = ((int)job.result.ScalarObject > 0);
+            });
+
+            return exists;
+        }
+
+        public void TableCreate<T>() where T : ITableConverter
+        {
+            TableCreate(Utilities.GetTableNameFromType<T>(), Utilities.GetColumnsFromType<T>());
+        }
+
+        public void TableCreate<T>(ITableConverter<T> table)
+        {
+            TableCreate(table.TableName, table.ToTable().Columns);
+        }
+
+        public void TableCreate(string tableName, IEnumerable<Column> columns)
+        {
+
+            string sql = "CREATE TABLE " + tableName + " (";
+
+
+            string sqlCols = string.Join(",", columns.Select(x => x.GetColumnDefinition()));
+
+            sql = sql + sqlCols + ")";
+
+            Query command = NewQuery(sql);
+
+            RunQuery(command);
+        }
+
+        //public void TableCreate(string tablename, params Column[] columns)
+        //{
+        //    TableCreate(tablename, columns);
+        //}
+
+        public bool TableExists(ITableConverter table)
+        {
+            return TableExists(table.TableName);
+        }
+
+        public bool TableExists<T>() where T : ITableConverter
+        {
+            return TableExists(Utilities.GetTableNameFromType<T>());
+        }
+
 
         public bool TableExists(string tableName)
         {
