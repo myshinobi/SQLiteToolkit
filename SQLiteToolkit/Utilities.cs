@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Reflection;
-
+using static LibraryofAlexandria.Utilities;
 namespace SQLiteToolkit
 {
     public static class Utilities
@@ -202,7 +202,7 @@ namespace SQLiteToolkit
 
         private static bool FieldTypeIsValidForColumn(Type t)
         {
-            return t == typeof(string) || t == typeof(decimal) || t == typeof(double) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(object);
+            return t == typeof(string) || t == typeof(decimal) || t == typeof(double) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(object);// || t.ImplementsType<IRelationship>();
         }
 
         //private static bool ObjectCanBeConvertedToValidColumnType(Type obj)
@@ -288,6 +288,14 @@ namespace SQLiteToolkit
             return (T)CreateInstance(type);
         }
 
-        
+        public static bool TypeHasPropertyThatImplements<T,TInterface>()
+        {
+            return typeof(T).GetProperties().Any(x => x.PropertyType.ImplementsType<TInterface>()); 
+        }
+
+        public static IEnumerable<PropertyInfo> GetPropertiesInTypeThatImplement<T, TInterface>()
+        {
+            return typeof(T).GetProperties().Where(x => x.PropertyType.ImplementsType<TInterface>());
+        }
     }
 }

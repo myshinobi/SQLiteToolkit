@@ -5,7 +5,7 @@ using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Threading;
-
+using LibraryofAlexandria;
 namespace SQLiteToolkit
 {
     public class Database
@@ -157,7 +157,7 @@ namespace SQLiteToolkit
             if (!obj.IsIndexed)
                 return false;
 
-            return RecordExists(obj.TableName, new KeyValuePair<Column, object>[] { new KeyValuePair<Column, object>(obj.IndexColumn, obj.Id)});
+            return RecordExists(obj.TableName, new KeyValuePair<Column, object>[] { new KeyValuePair<Column, object>(obj.IndexColumn, obj.GetId())});
         }
 
         public bool RecordExists(string tablename, params KeyValuePair<Column, object>[] values)
@@ -174,15 +174,26 @@ namespace SQLiteToolkit
             return exists;
         }
 
+
         public void TableCreate<T>() where T : ITableConverter
         {
+            //create my table
             TableCreate(Utilities.GetTableNameFromType<T>(), Utilities.GetColumnsFromType<T>());
+
+            bool needsJoiningTables = Utilities.TypeHasPropertyThatImplements<T, IRelationship>();
+
+            var fks = Utilities.GetPropertiesInTypeThatImplement<T, IRelationship>();
+
+            fks.ForEach(x =>
+            {
+
+            });
         }
 
-        public void TableCreate<T>(ITableConverter<T> table)
-        {
-            TableCreate(table.TableName, table.ToTable().Columns);
-        }
+        //public void TableCreate<T>(ITableConverter<T> table)
+        //{
+        //    TableCreate(table.TableName, table.ToTable().Columns);
+        //}
 
         public void TableCreate(string tableName, IEnumerable<Column> columns)
         {

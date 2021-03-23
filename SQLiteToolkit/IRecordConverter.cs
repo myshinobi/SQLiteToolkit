@@ -10,9 +10,10 @@ namespace SQLiteToolkit
     public interface IIndexableRecordConverter : IRecordConverter
     {
         Column IndexColumn { get; }
-        object Id { get; set; }
+        //object Id { get; set; }
+        object GetId();
 
-        bool UseAutoIncrementId { get; }
+        //bool UseAutoIncrementId { get; }
         bool IsIndexed { get; }
 
         Type GetIndexColumnType();
@@ -32,7 +33,24 @@ namespace SQLiteToolkit
 
     public class AutoIndexableRecordConverter<T> : IndexableRecordConverter<T>
     {
-        public override bool UseAutoIncrementId => true;
+        //public override bool UseAutoIncrementId => true;
+
+        public int Index
+        {
+            get
+            {
+                return (int)GetId();
+            }
+        }
+
+        //public override object Id { get => base.Id; set => base.Id = value; }
+        public override bool IsIndexed
+        {
+            get
+            {
+                return Index > 0;
+            }
+        }
     }
     public class IndexableRecordConverter<T> : RecordConverter<T>, IIndexableRecordConverter
     {
@@ -40,10 +58,10 @@ namespace SQLiteToolkit
         {
             get
             {
-                if (!UseAutoIncrementId)
-                    throw new Exception(typeof(T).Name +" must override IndexColumn because UseAutoIncrementId is true.");
+                //if (!UseAutoIncrementId)
+                    throw new Exception(typeof(T).Name +" must override IndexColumn");
 
-                return Column.Create(GetIndexColumnName(), typeof(int), true);
+                //return Column.Create(GetIndexColumnName(), typeof(int), true);
             }
         }
 
@@ -54,52 +72,60 @@ namespace SQLiteToolkit
             get
             {
 
-                //return Id != null;
+                return GetId() != null;
 
                 //if (!UseAutoIncrementId)
                 //    throw new Exception(typeof(T).Name + " must override IsIndexed because UseAutoIncrementId is true.");
 
                 //return (int)Id > -1;
 
-                if (Id == null)
-                {
-                    return false;
-                }
-                else
-                {
-                    if (UseAutoIncrementId)
-                    {
-                        return (int)Id > -1;
-                    }
-                    else
-                    {
-                        throw new Exception(typeof(T).Name + " must override IsIndexed because UseAutoIncrementId is true.");
-                    }
-                }
+                //if (Id == null)
+                //{
+                //    return false;
+                //}
+                //else
+                //{
+                //    if (UseAutoIncrementId)
+                //    {
+                //        return (int)Id > -1;
+                //    }
+                //    else
+                //    {
+                //        throw new Exception(typeof(T).Name + " must override IsIndexed because UseAutoIncrementId is true.");
+                //    }
+                //}
             }
         }
 
 
         //public virtual object Id { get; set; }
 
-        public virtual bool UseAutoIncrementId
-        {
-            get
-            {
-                return false;
-            }
-        }
+        //public virtual bool UseAutoIncrementId
+        //{
+        //    get
+        //    {
+        //        return false;
+        //    }
+        //}
 
         public virtual string GetIndexColumnName()
         {
-            return nameof(Id);
+            throw new Exception(typeof(T).Name + " must override GetIndexColumnName()");
+            //return nameof(Id);
         }
 
-        public object Id { get; set; } = -1;
+        //public virtual object Id { get; set; } = -1;
+
+        //public bool UseAutoIncrementId => throw new NotImplementedException();
 
         public Type GetIndexColumnType()
         {
             return IndexColumn.type;
+        }
+
+        public object GetId()
+        {
+            return null;
         }
 
         //public object GetId()

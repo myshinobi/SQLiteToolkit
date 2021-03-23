@@ -26,6 +26,7 @@ namespace SQLiteToolkit
         string TableName { get; }
         Table ToTable();
 
+        bool HasChildTables();
     }
 
     //public class IndexableTableConverter<T> : TableConverter<T>, IIndexableTableConverter<T>
@@ -49,6 +50,11 @@ namespace SQLiteToolkit
                 }
                 return _tableName;
             }
+        }
+
+        public bool HasChildTables()
+        {
+            return Utilities.TypeHasPropertyThatImplements<T, IRelationship>();
         }
 
         //public virtual T FromDataTable(DataTable dataTable)
