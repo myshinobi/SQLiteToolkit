@@ -9,6 +9,13 @@ namespace SQLiteToolkit
 {
     public class Relationship<ChildType> : Dictionary<object, ChildType>, IRelationship<ChildType> where ChildType : IIndexableRecordConverter
     {
+
+        public Dictionary<object, ChildType> ToDictionary()
+        {
+            return (Dictionary<object, ChildType>)this;
+        }
+        public virtual RelationshipType RelationshipType => throw new NotImplementedException();
+
         //private Dictionary<object, IIndexableRecordConverter> data = new Dictionary<object, IIndexableRecordConverter>();
         //public virtual IIndexableRecordConverter this[object key] 
         //{
@@ -43,6 +50,37 @@ namespace SQLiteToolkit
         {
             return this[key];
         }
+
+        private Type _childType = null;
+        public Type GetChildType()
+        {
+            if (_childType == null)
+            {
+                _childType = typeof(ChildType);
+            }
+
+            return _childType;
+        }
+    }
+
+    public class OneToOneRelationship<FKType, ChildType> : Relationship<ChildType> where ChildType : IIndexableRecordConverter
+    {
+        public override RelationshipType RelationshipType => RelationshipType.OneToOne;
+        public ChildType GetChild()
+        {
+            return (ChildType)this.First().Value;
+        }
+
+        public FKType GetForeignKey()
+        {
+            return (FKType)this.First().Key;
+        }
+    }
+
+
+    public class OneToOneRelationship<ChildType> : OneToOneRelationship<object, ChildType> where ChildType : IIndexableRecordConverter
+    {
+
     }
 
     public class OneToManyRelationship<ChildType> : OneToManyRelationship<object, ChildType> where ChildType : IIndexableRecordConverter
@@ -51,6 +89,7 @@ namespace SQLiteToolkit
     }
     public class OneToManyRelationship<FKType,ChildType> : Relationship<ChildType> where ChildType :IIndexableRecordConverter
     {
+        public override RelationshipType RelationshipType => RelationshipType.OneToMany;
         public ChildType this[FKType a]
         {
             get
@@ -74,5 +113,17 @@ namespace SQLiteToolkit
         object[] GetForeignKeys();
         KeyType[] GetForeignKeys<KeyType>();
 
+        
+        RelationshipType RelationshipType { get; }
+
+        Type GetChildType();
+    }
+
+    public enum RelationshipType
+    {
+        OneToOne = 0,
+        OneToMany = 1,
+        ManyToMany = 2,
+        ManyToOne = 3
     }
 }

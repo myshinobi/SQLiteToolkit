@@ -15,9 +15,9 @@ namespace SQLiteToolkit
 
         public static Record ToRecord<T>(this T data)
         {
-            return new Record(GetColumnDataFromReflection(data));
+            return new Record(GetColumnDataFromReflection(data), typeof(T));
         }
-        public static Record ToRecord<T>(this DataRow dataRow)
+        public static Record ToRecord<T>(this DataRow dataRow, bool isStatic)
         {
             //var properties = typeof(T).GetProperties();
 
@@ -27,17 +27,17 @@ namespace SQLiteToolkit
             {
                 var val = dataRow[col];
 
-                values.Add(new KeyValuePair<Column, object>(col.ToColumn<T>(), val));
+                values.Add(new KeyValuePair<Column, object>(col.ToColumn<T>(isStatic), val));
             }
 
-            return new Record(values);
+            return new Record(values, typeof(T));
         }
 
-        public static Table ToTable<T>(this T table)
+        public static Table ToTable<T>(this T table, bool isStatic)
         {
             var cols = GetColumnsFromType<T>();
 
-            return new Table(GetTableNameFromType(table), cols);
+            return new Table(GetTableNameFromType(table), cols, isStatic);
         }
 
         public static string GetTableNameFromType<T>()
@@ -59,9 +59,9 @@ namespace SQLiteToolkit
 
         }
 
-        public static Table ToTable<T>(this DataTable dataTable)
+        public static Table ToTable<T>(this DataTable dataTable, bool isStatic)
         {
-            return Table.Create<T>(dataTable);
+            return Table.Create<T>(dataTable, isStatic);
         }
 
         public static void SetValuesFromRecord<T>(this T obj, Record record)
@@ -142,7 +142,7 @@ namespace SQLiteToolkit
         private static IEnumerable<FieldInfo> GetFieldsToBeColumns(Type type)
         {
 
-            var fieldInfos = type.GetFields(BindingFlags.Public | BindingFlags.Instance).Where(x => FieldTypeIsValidForColumn(x.FieldType));
+            var fieldInfos = type.GetFields(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static);//.Where(x => FieldTypeIsValidForColumn(x.FieldType));
 
 
             //var interfaces = type.GetInterfaces();
@@ -169,7 +169,7 @@ namespace SQLiteToolkit
 
         private static IEnumerable<PropertyInfo> GetPropertiesToBeColumns(Type type)
         {
-            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(x => FieldTypeIsValidForColumn(x.PropertyType) && x.CanWrite && x.CanRead);
+            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static).Where(x => /*FieldTypeIsValidForColumn(x.PropertyType) && */x.CanWrite && x.CanRead);
 
 
             //var interfaces = type.GetInterfaces();
@@ -202,7 +202,7 @@ namespace SQLiteToolkit
 
         private static bool FieldTypeIsValidForColumn(Type t)
         {
-            return t == typeof(string) || t == typeof(decimal) || t == typeof(double) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(object);// || t.ImplementsType<IRelationship>();
+            return t == typeof(string) || t == typeof(decimal) || t == typeof(double) || t == typeof(float) || t == typeof(int) || t == typeof(bool) || t == typeof(object) || t.ImplementsType<IRelationship>();
         }
 
         //private static bool ObjectCanBeConvertedToValidColumnType(Type obj)
@@ -218,14 +218,14 @@ namespace SQLiteToolkit
             {
                 t = testData.GetType();
             }
-            Column col = Column.Create<T>(propertyInfo.Name, t);
+            Column col = Column.Create<T>(propertyInfo.Name, t, propertyInfo.GetMethod.IsStatic);
 
             return col;
         }
 
-        public static Column ToColumn<T>(this DataColumn dataColumn)
+        public static Column ToColumn<T>(this DataColumn dataColumn, bool isStatic)
         {
-            return Column.Create<T>(dataColumn.ColumnName, dataColumn.DataType);
+            return Column.Create<T>(dataColumn.ColumnName, dataColumn.DataType, isStatic);
         }
 
         public static Column ToColumn<T>(this FieldInfo fieldInfo, object testData)
@@ -235,7 +235,7 @@ namespace SQLiteToolkit
             {
                 t = testData.GetType();
             }
-            Column col = Column.Create<T>(fieldInfo.Name, t);
+            Column col = Column.Create<T>(fieldInfo.Name, t, fieldInfo.IsStatic);
 
 
             return col;
@@ -244,17 +244,22 @@ namespace SQLiteToolkit
         public static bool ImplementsType<T>(this Type type)
         {
             Type IType = typeof(T);
-            bool implements = type.IsAssignableFrom(IType);
+            return ImplementsType(type, IType);
+        }
+
+        public static bool ImplementsType(this Type type, Type interfaceType)
+        {
+            bool implements = type.IsAssignableFrom(interfaceType);
             Type[] interfaces;
             if (!implements)
             {
                 interfaces = type.GetInterfaces();
-                implements = interfaces.Contains(IType);
+                implements = interfaces.Contains(interfaceType);
 
-                
+
                 if (!implements)
                 {
-                    implements = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == IType);
+                    implements = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == interfaceType);
 
                 }
             }
@@ -263,7 +268,6 @@ namespace SQLiteToolkit
 
             return implements;
         }
-
         //public static Column ToColumn<T>(this MemberInfo memberInfo, object testData)
         //{
         //    Type t = memberInfo.DeclaringType;
@@ -288,14 +292,86 @@ namespace SQLiteToolkit
             return (T)CreateInstance(type);
         }
 
-        public static bool TypeHasPropertyThatImplements<T,TInterface>()
+        public static bool TypeHasPropertyThatImplements<T, TInterface>()
         {
-            return typeof(T).GetProperties().Any(x => x.PropertyType.ImplementsType<TInterface>()); 
+            return typeof(T).GetProperties().Any(x => x.PropertyType.ImplementsType<TInterface>());
         }
 
         public static IEnumerable<PropertyInfo> GetPropertiesInTypeThatImplement<T, TInterface>()
         {
             return typeof(T).GetProperties().Where(x => x.PropertyType.ImplementsType<TInterface>());
         }
+
+
+        public static bool TypeHasFieldThatImplements<T, TInterface>()
+        {
+            return typeof(T).GetFields().Any(x => x.FieldType.ImplementsType<TInterface>());
+        }
+
+        public static IEnumerable<FieldInfo> GetFieldsInTypeThatImplement<T, TInterface>()
+        {
+            return typeof(T).GetFields().Where(x => x.FieldType.ImplementsType<TInterface>());
+        }
+
+        public static TValue GetValue<TObj, TValue>(this TObj data, string variableName)
+        {
+            return GetValue<TValue>(data, variableName, typeof(TObj));
+        }
+
+        public static object GetValue<TObj>(this TObj obj, string variableName)
+        {
+            return GetValue(obj, variableName, typeof(TObj));
+        }
+
+        public static TValue GetValue<TValue>(this object obj, string variableName, Type objType)
+        {
+            return (TValue)GetValue(obj, variableName, objType);
+        }
+        public static object GetValue(this object obj, string variableName, Type objType)
+        {
+            var fields = objType.GetFields(BindingFlags.Public | BindingFlags.Instance).Where(x => x.Name == variableName);
+
+            if (fields.Count() > 0)
+            {
+                var field = fields.First();
+
+                return field.GetValue(obj);
+            }
+
+            var properties = objType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(x => x.CanRead && x.Name == variableName);
+
+            if (properties.Count() > 0)
+            {
+                var property = properties.First();
+
+                return property.GetValue(obj);
+            }
+
+            return null;
+        }
+
+        public static Type GetVariableType(this Type objType, string variableName)
+        {
+            var fields = objType.GetFields(BindingFlags.Public | BindingFlags.Instance).Where(x => x.Name == variableName);
+
+            if (fields.Count() > 0)
+            {
+                var field = fields.First();
+
+                return field.FieldType;
+            }
+
+            var properties = objType.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(x => x.CanRead && x.Name == variableName);
+
+            if (properties.Count() > 0)
+            {
+                var property = properties.First();
+
+                return property.PropertyType;
+            }
+
+            return null;
+        }
+
     }
 }

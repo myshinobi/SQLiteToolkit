@@ -24,9 +24,15 @@ namespace SQLiteToolkit
     public interface ITableConverter
     {
         string TableName { get; }
-        Table ToTable();
+        Table ToTable(bool isStatic);
 
         bool HasChildTables();
+
+        bool IsIndexable();
+
+        IIndexableRecordConverter GetIndexableRecordConverter();
+
+        Type GetTableType();
     }
 
     //public class IndexableTableConverter<T> : TableConverter<T>, IIndexableTableConverter<T>
@@ -51,10 +57,28 @@ namespace SQLiteToolkit
                 return _tableName;
             }
         }
+        private Type _tableType = null;
+        public Type GetTableType()
+        {
+            if (_tableType == null)
+                _tableType = typeof(T);
+
+            return _tableType;
+        }
 
         public bool HasChildTables()
         {
             return Utilities.TypeHasPropertyThatImplements<T, IRelationship>();
+        }
+
+        public bool IsIndexable()
+        {
+            return GetTableType().ImplementsType<IIndexableRecordConverter>();
+        }
+
+        public IIndexableRecordConverter GetIndexableRecordConverter()
+        {
+            return (IIndexableRecordConverter)this;
         }
 
         //public virtual T FromDataTable(DataTable dataTable)
@@ -65,9 +89,9 @@ namespace SQLiteToolkit
         //    var table = dataTable.ToTable();
         //}
 
-        public virtual Table ToTable()
+        public virtual Table ToTable(bool isStatic)
         {
-            return Utilities.ToTable(this);
+            return Utilities.ToTable(this, isStatic);
         }
     }
 }

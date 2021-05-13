@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Reflection;
+using LibraryofAlexandria;
 namespace SQLiteToolkit
 {
     //public class IndexableRecord : Record
@@ -18,10 +19,10 @@ namespace SQLiteToolkit
     //        this.IndexField = indexField;
     //    }
     //}
-    public class Record
+    public class Record : Dictionary<Column, object>
     {
-        private Dictionary<Column, object> data = new Dictionary<Column, object>();
-        public object this[Column key] { get => data[key]; }
+        //private Dictionary<Column, object> data = new Dictionary<Column, object>();
+        //public object this[Column key] { get => data[key]; }
 
         public object this[PropertyInfo propertyInfo]
         {
@@ -42,7 +43,7 @@ namespace SQLiteToolkit
             get
             {
 
-                var result = data.Where(x => x.Key.Name == key);
+                var result = this.Where(x => x.Key.Name == key);
                 if (result.Count() > 0)
                 {
                     return result.ElementAt(0);
@@ -53,20 +54,35 @@ namespace SQLiteToolkit
             }
         }
 
-        public Record(IEnumerable<KeyValuePair<Column, object>> data)
+        public Record(IEnumerable<KeyValuePair<Column, object>> data, Type recordType)
         {
-            this.data = data.ToDictionary(x=> x.Key, x=>x.Value);
-        
+            var dict = data.ToDictionary(x=> x.Key, x=>x.Value);
+
+            dict.ForEach(page =>
+            {
+                if (!ContainsKey(page.Key))
+                {
+                    Add(page.Key, page.Value);
+                }
+            });
         }
 
-        public Record(params KeyValuePair<Column, object>[] data)
+        public Record(Type recordType,params KeyValuePair<Column, object>[] data)
         {
-            this.data = data.ToDictionary(x => x.Key, x => x.Value);
+            var dict = data.ToDictionary(x => x.Key, x => x.Value);
+
+            dict.ForEach(page =>
+            {
+                if (!ContainsKey(page.Key))
+                {
+                    Add(page.Key, page.Value);
+                }
+            });
         }
 
         public KeyValuePair<Column, object>[] GetKeyValuePairs()
         {
-            return data.ToArray();
+            return this.ToArray();
         }
 
     }

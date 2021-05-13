@@ -11,6 +11,10 @@ namespace SQLiteToolkit
         public string Name;
         public bool NotNull;
         public bool IsPrimaryKey;
+        public bool IsForeignKey;
+        public bool IsAutoIncrement;
+        public bool IsStatic;
+        public TableType tableType;
         //public object DefaultValue;
         //public object type;
         public Type type;
@@ -27,6 +31,10 @@ namespace SQLiteToolkit
         //    return col;
         //}
 
+        public override string ToString()
+        {
+            return Name;
+        }
         public override bool Equals(object obj)
         {
             if (typeof(Column) == obj.GetType())
@@ -45,24 +53,48 @@ namespace SQLiteToolkit
         }
 
 
-        public static Column Create<T>(string name, Type type)
+        public static Column Create<T>(string name, Type type, bool isStatic)
         {
             string pkName = "";
+            bool isAutoInc = false;
             if (typeof(T).ImplementsType<IIndexableRecordConverter>())
             {
                 var t = (IIndexableRecordConverter)Utilities.CreateInstance<T>();
-                pkName = t.GetIndexColumnName();
+                pkName = t.GetPrimaryKey();
+
+                if (t is AutoIndexableRecordConverter<T> && pkName == name)
+                {
+                   
+                    isAutoInc = true;
+                }
+                
             }
             bool isPK = (name == pkName);
-            return Create(name, type, isPK);
+            bool isFK = type.ImplementsType<IRelationship>();
+            return Create(name, type, isPK, isFK, isAutoInc, isStatic);
         }
 
-        public static Column Create(string name, Type type, bool IsPrimaryKey)
+        //public static Column Create<T>(string name, T defaultValue, bool isStatic)
+        //{
+
+        //}
+
+        //public static Column Create(string name, object defaultValue, bool isStatic)
+        //{
+        //    return Create<object>(name, defaultValue, isStatic);
+        //}
+
+        public static Column Create(string name, Type type, bool IsPrimaryKey, bool isForeignKey, bool isAutoIncrement, bool isStatic)
         {
             Column col = new Column();
             col.type = type;
             col.Name = name;
             col.IsPrimaryKey = IsPrimaryKey;
+            col.IsForeignKey = isForeignKey;
+            col.IsAutoIncrement = isAutoIncrement;
+            col.IsStatic = isStatic;
+
+            col.tableType = (isStatic ? TableType.Static : (isForeignKey ? TableType.Join: TableType.Instance));
 
 
 
@@ -131,6 +163,13 @@ namespace SQLiteToolkit
             REAL,
             NUMERIC,
             BLOB
+        }
+
+        public enum TableType
+        {
+            Instance = 0,
+            Join = 1,
+            Static = 2
         }
 
         public SQLDataTypes GetSQLDataType()

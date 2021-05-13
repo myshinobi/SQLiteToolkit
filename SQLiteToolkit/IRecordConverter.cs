@@ -9,37 +9,54 @@ namespace SQLiteToolkit
 {
     public interface IIndexableRecordConverter : IRecordConverter
     {
-        Column IndexColumn { get; }
+        Column PrimaryKeyColumn { get; }
+
+        Column ForeignKeyColumn { get; }
         //object Id { get; set; }
         object GetId();
 
         //bool UseAutoIncrementId { get; }
         bool IsIndexed { get; }
 
-        Type GetIndexColumnType();
+        Type GetPrimaryKeyType();
 
-        string GetIndexColumnName();
+        string GetPrimaryKey();
     }
     public interface IRecordConverter<T> : IRecordConverter, ITableConverter<T>
     {
 
         T FromDataRow(DataRow row);
+        T ToObject<T>();
     }
 
     public interface IRecordConverter : ITableConverter
     {
         Record ToRecord();
+
+        Type GetRecordType();
+        void Save(Database database);
+
     }
 
     public class AutoIndexableRecordConverter<T> : IndexableRecordConverter<T>
     {
         //public override bool UseAutoIncrementId => true;
+        private int _rowid = -1;
 
-        public int Index
+        public override object GetId()
+        {
+            return _rowid;
+        }
+        public int ROWID
         {
             get
             {
-                return (int)GetId();
+                return _rowid;
+            }
+
+            set
+            {
+                _rowid = value;
             }
         }
 
@@ -48,90 +65,52 @@ namespace SQLiteToolkit
         {
             get
             {
-                return Index > 0;
+                return ROWID > 0;
             }
         }
+
+        public override string GetPrimaryKey()
+        {
+            return nameof(ROWID);
+        }
+
+        public override Column PrimaryKeyColumn => Column.Create(GetPrimaryKey(), typeof(int), true, false, true, false);
     }
     public class IndexableRecordConverter<T> : RecordConverter<T>, IIndexableRecordConverter
     {
-        public virtual Column IndexColumn
+        public virtual Column PrimaryKeyColumn => Column.Create(GetPrimaryKey(), GetPrimaryKeyType(), true, false, false, false);
+
+        public virtual bool IsIndexed => GetId() != null;
+
+        public Column ForeignKeyColumn
         {
             get
             {
-                //if (!UseAutoIncrementId)
-                    throw new Exception(typeof(T).Name +" must override IndexColumn");
+                Column pk = PrimaryKeyColumn;
 
-                //return Column.Create(GetIndexColumnName(), typeof(int), true);
+                pk.IsForeignKey = true;
+                pk.IsPrimaryKey = false;
+                pk.IsAutoIncrement = false;
+                pk.NotNull = true;
+
+                return pk;
             }
         }
 
-        //public object Id = -1;
-
-        public virtual bool IsIndexed
+        public virtual string GetPrimaryKey()
         {
-            get
-            {
-
-                return GetId() != null;
-
-                //if (!UseAutoIncrementId)
-                //    throw new Exception(typeof(T).Name + " must override IsIndexed because UseAutoIncrementId is true.");
-
-                //return (int)Id > -1;
-
-                //if (Id == null)
-                //{
-                //    return false;
-                //}
-                //else
-                //{
-                //    if (UseAutoIncrementId)
-                //    {
-                //        return (int)Id > -1;
-                //    }
-                //    else
-                //    {
-                //        throw new Exception(typeof(T).Name + " must override IsIndexed because UseAutoIncrementId is true.");
-                //    }
-                //}
-            }
+            throw new Exception(typeof(T).Name + " must override GetPrimaryKey()");
+        }
+        public Type GetPrimaryKeyType()
+        {
+            return this.GetRecordType().GetVariableType(GetPrimaryKey());
         }
 
-
-        //public virtual object Id { get; set; }
-
-        //public virtual bool UseAutoIncrementId
-        //{
-        //    get
-        //    {
-        //        return false;
-        //    }
-        //}
-
-        public virtual string GetIndexColumnName()
+        public virtual object GetId()
         {
-            throw new Exception(typeof(T).Name + " must override GetIndexColumnName()");
-            //return nameof(Id);
+            return this.GetValue(GetPrimaryKey());
         }
 
-        //public virtual object Id { get; set; } = -1;
-
-        //public bool UseAutoIncrementId => throw new NotImplementedException();
-
-        public Type GetIndexColumnType()
-        {
-            return IndexColumn.type;
-        }
-
-        public object GetId()
-        {
-            return null;
-        }
-
-        //public object GetId()
-        //{
-        //    return Id;
-        //}
     }
 
     public class RecordConverter<T> : TableConverter<T>, IRecordConverter<T>
@@ -153,11 +132,29 @@ namespace SQLiteToolkit
             return t;
         }
 
+        private Type _recordType = null;
+        public Type GetRecordType()
+        {
+            if (_recordType == null)
+                _recordType = typeof(T);
+
+            return _recordType;
+        }
+
         public virtual Record ToRecord()
         {
 
-            return Utilities.ToRecord(this);
+            return Utilities.ToRecord<T>(ToObject<T>());
 
+        }
+        public void Save(Database database)
+        {
+            database.SaveRecord(this);
+        }
+
+        public T ToObject<T>()
+        {
+            return (T)((object)this);
         }
     }
 

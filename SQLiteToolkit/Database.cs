@@ -12,6 +12,7 @@ namespace SQLiteToolkit
     {
         public SQLiteConnection myConnection;
         public string DatabaseFilePath;
+        public static string StaticTableName = "StaticVariables";
         public Database()
         {
 
@@ -157,7 +158,7 @@ namespace SQLiteToolkit
             if (!obj.IsIndexed)
                 return false;
 
-            return RecordExists(obj.TableName, new KeyValuePair<Column, object>[] { new KeyValuePair<Column, object>(obj.IndexColumn, obj.GetId())});
+            return RecordExists(obj.TableName, new KeyValuePair<Column, object>[] { new KeyValuePair<Column, object>(obj.PrimaryKeyColumn, obj.GetId())});
         }
 
         public bool RecordExists(string tablename, params KeyValuePair<Column, object>[] values)
@@ -178,16 +179,107 @@ namespace SQLiteToolkit
         public void TableCreate<T>() where T : ITableConverter
         {
             //create my table
-            TableCreate(Utilities.GetTableNameFromType<T>(), Utilities.GetColumnsFromType<T>());
+            string tableName = Utilities.GetTableNameFromType<T>();
 
-            bool needsJoiningTables = Utilities.TypeHasPropertyThatImplements<T, IRelationship>();
+            IEnumerable<Column> columns = Utilities.GetColumnsFromType<T>();
 
-            var fks = Utilities.GetPropertiesInTypeThatImplement<T, IRelationship>();
-
-            fks.ForEach(x =>
+            var colGroups = columns.GroupBy(x => x.tableType);
+            var joinColsGroup = colGroups.Where(x => x.Key == Column.TableType.Join);
+            var staticColsGroup = colGroups.Where(x => x.Key == Column.TableType.Static);
+            bool hasJoinTable = false;
+            bool hasStaticCols = false;
+            if (joinColsGroup.Count() > 0)
             {
+                hasJoinTable = true;
+            }
+            if (staticColsGroup.Count() > 0)
+            {
+                hasStaticCols = true;
+            }
+            var myCols = colGroups.Where(x => x.Key == Column.TableType.Instance).First().Select(x => x);
+            if (!TableExists(tableName))
+                TableCreate(tableName, myCols);
 
-            });
+            Type tableType = typeof(T);
+            //create join tables
+            if (hasJoinTable)
+            {
+                var joinCols = joinColsGroup.First().Select(x => x);
+
+                T testTable = Utilities.CreateInstance<T>();
+                if (testTable.IsIndexable())
+                {
+
+                    joinCols.ForEach(joinCol =>
+                    {
+
+                        IRelationship relationship = testTable.GetValue<IRelationship>(joinCol.Name, tableType);
+                        if (relationship == null)
+                        {
+                            relationship = (IRelationship)Utilities.CreateInstance(joinCol.type);
+                        }
+                        Type childTableType = relationship.GetChildType();
+                        var testChildTable = (ITableConverter)Utilities.CreateInstance(childTableType);
+                        if (testChildTable.IsIndexable())
+                        {
+
+                            string otherTableName = Utilities.GetTableNameFromType(childTableType);
+                            string joinTableName = tableName + "_JOIN_" + joinCol.Name;
+
+                            if (!TableExists(joinTableName))
+                            {
+                                IIndexableRecordConverter leftRecord = (IIndexableRecordConverter)testTable;
+                                IIndexableRecordConverter rightRecord = (IIndexableRecordConverter)testChildTable;
+                                IEnumerable<Column> joinTableColumns = new Column[]
+                                {
+                                    leftRecord.ForeignKeyColumn, rightRecord.ForeignKeyColumn
+                                };
+
+                                TableCreate(joinTableName, joinTableColumns);
+
+                            }
+
+                        }
+                    });
+                }
+            }
+
+
+            //create static tables
+            if (hasStaticCols)
+            {
+                var staticCols = staticColsGroup.First().Select(x => x);
+
+                if (!TableExists(StaticTableName))
+                {
+                    Column classCol = Column.Create<T>("Class", typeof(string), true);
+                    Column variableCol = Column.Create<T>("Variable", typeof(string), true);
+                    Column valueCol = Column.Create<T>("Value", typeof(object), true);
+                    TableCreate(StaticTableName, new Column[] { classCol, variableCol, valueCol});
+                }
+
+
+                //string className = tableType.Name;
+
+                //staticCols.ForEach(col =>
+                //{
+                //    string variableName = col.Name;
+                //    string valueData = "";
+
+
+                //});
+            }
+
+        }
+
+        public void LoadStaticValues()
+        {
+
+        }
+
+        public void SaveStaticValues()
+        {
+
         }
 
         //public void TableCreate<T>(ITableConverter<T> table)
@@ -234,6 +326,57 @@ namespace SQLiteToolkit
             QueryJob job = RunQuery(query);
 
             return ((long)job.result.ScalarObject > 0);
+        }
+
+        public bool ColumnExists(string tableName, string columnName)
+        {
+            return false;
+        }
+
+        public void SaveRecord(IRecordConverter recordConverter)
+        {
+            if (recordConverter.IsIndexable())
+            {
+                IIndexableRecordConverter indexableRecord = recordConverter.GetIndexableRecordConverter();
+
+                if (indexableRecord.IsIndexed)
+                {
+                    //update
+                    Update(recordConverter);
+                }
+                else
+                {
+                    //insert
+                    Insert(recordConverter);
+                }
+            }
+            else
+            {
+                //insert
+                Insert(recordConverter);
+            }
+        }
+
+        public void Insert(IRecordConverter recordConverter)
+        {
+            Insert(recordConverter.ToRecord());
+        }
+
+        public void Insert(Record record)
+        {
+            
+        }
+
+        public void Update(IRecordConverter recordConverter)
+        {
+
+        }
+
+        public TRecord LoadRecord<TRecord>(TRecord record) where TRecord : IIndexableRecordConverter
+        {
+
+
+            return record;
         }
 
         public bool LoadDatabase(string databaseFile)
