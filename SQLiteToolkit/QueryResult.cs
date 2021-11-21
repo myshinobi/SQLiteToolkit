@@ -15,6 +15,7 @@ namespace SQLiteToolkit
         public DateTime timeFinishedUTC;
         public Exception exception;
         public object ScalarObject;
+        
         public bool Failed 
         { 
             get

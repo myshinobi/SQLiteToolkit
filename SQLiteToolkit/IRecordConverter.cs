@@ -7,6 +7,10 @@ using System.Threading.Tasks;
 using System.Reflection;
 namespace SQLiteToolkit
 {
+    public interface IAutoIndexableRecordConverter : IRecordConverter
+    {
+
+    }
     public interface IIndexableRecordConverter : IRecordConverter
     {
         Column PrimaryKeyColumn { get; }
@@ -38,7 +42,7 @@ namespace SQLiteToolkit
 
     }
 
-    public class AutoIndexableRecordConverter<T> : IndexableRecordConverter<T>
+    public class AutoIndexableRecordConverter<T> : IndexableRecordConverter<T>, IAutoIndexableRecordConverter
     {
         //public override bool UseAutoIncrementId => true;
         private int _rowid = -1;
@@ -121,7 +125,7 @@ namespace SQLiteToolkit
         {
             this.dataRow = row;
 
-            var record = Utilities.ToRecord(row);
+            var record = row.ToRecord(TableName);
 
             T t = default(T);
 
@@ -144,13 +148,14 @@ namespace SQLiteToolkit
         public virtual Record ToRecord()
         {
 
-            return Utilities.ToRecord<T>(ToObject<T>());
+            return ToObject<T>().ToRecord<T>(TableName);
 
         }
         public void Save(Database database)
         {
             database.SaveRecord(this);
         }
+
 
         public T ToObject<T>()
         {

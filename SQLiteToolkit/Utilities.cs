@@ -13,9 +13,14 @@ namespace SQLiteToolkit
             return GetColumnsFromReflection<T>();
         }
 
-        public static Record ToRecord<T>(this T data)
+        public static ICollection<KeyValuePair<Column,object>> GetStaticVariableColumnsAndData(Type tTable)
         {
-            return new Record(GetColumnDataFromReflection(data), typeof(T));
+            return GetColumnDataFromReflection(tTable, null, x => x.IsStatic);
+        }
+
+        public static Record ToRecord<T>(this T data, string tablename)
+        {
+            return new Record(tablename, GetColumnDataFromReflection(data));
         }
         public static Record ToRecord<T>(this DataRow dataRow, bool isStatic)
         {
@@ -30,7 +35,7 @@ namespace SQLiteToolkit
                 values.Add(new KeyValuePair<Column, object>(col.ToColumn<T>(isStatic), val));
             }
 
-            return new Record(values, typeof(T));
+            return new Record(dataRow.Table.TableName,values);
         }
 
         public static Table ToTable<T>(this T table, bool isStatic)
@@ -77,6 +82,8 @@ namespace SQLiteToolkit
 
         }
 
+
+
         private static ICollection<KeyValuePair<Column, object>> GetColumnDataFromReflection<T>(T data)
         {
             List<KeyValuePair<Column, object>> columnData = new List<KeyValuePair<Column, object>>();
@@ -102,6 +109,76 @@ namespace SQLiteToolkit
             }
 
             return columnData;
+        }
+
+
+        //private static ICollection<KeyValuePair<Column, object>> GetColumnDataFromReflection(Type tTable, Func<Column, bool> code = null)
+        //{
+        //    return GetColumnDataFromReflection(tTable, null, code);
+        //}
+
+        private static ICollection<KeyValuePair<Column, object>> GetColumnDataFromReflection(Type tTable, object objData = null, Func<Column,bool> code = null)
+        {
+            List<KeyValuePair<Column, object>> record = new List<KeyValuePair<Column, object>>();
+            IEnumerable<FieldInfo> fields = GetFieldsToBeColumns(tTable);
+            foreach (FieldInfo field in fields)
+            {
+                if (!record.Exists(x => x.Key.Name == field.Name))
+                {
+                    Column col = Column.Create(field, field.FieldType, tTable);
+                    bool shouldCreate = true;
+
+                    if (code != null)
+                        shouldCreate = code(col);
+
+                    if (shouldCreate)
+                        record.Add(new KeyValuePair<Column, object>(col, field.GetValue(objData)));
+                }
+            }
+            IEnumerable<PropertyInfo> properties = GetPropertiesToBeColumns(tTable);
+
+            foreach (PropertyInfo property in properties)
+            {
+                if (!record.Exists(x => x.Key.Name == property.Name))
+                {
+                    Column col = Column.Create(property, property.PropertyType, tTable);
+                    bool shouldCreate = true;
+
+                    if (code != null)
+                        shouldCreate = code(col);
+
+                    if (shouldCreate)
+                        record.Add(new KeyValuePair<Column, object>(col, property.GetValue(objData)));
+                }
+            }
+
+
+            return record;
+        }
+
+        private static IEnumerable<Column> GetColumnsFromReflection(Type tTable)
+        {
+            List<Column> columns = new List<Column>();
+            IEnumerable<FieldInfo> fields = GetFieldsToBeColumns(tTable);
+            foreach (FieldInfo field in fields)
+            {
+                if (!columns.Exists(x => x.Name == field.Name))
+                {
+                    columns.Add(Column.Create(field, field.FieldType, tTable));
+                }
+            }
+            IEnumerable<PropertyInfo> properties = GetPropertiesToBeColumns(tTable);
+
+            foreach (PropertyInfo property in properties)
+            {
+                if (!columns.Exists(x => x.Name == property.Name))
+                {
+                    columns.Add(Column.Create(property, property.PropertyType, tTable));
+                }
+            }
+
+
+            return columns;
         }
 
         private static IEnumerable<Column> GetColumnsFromReflection<T>()
@@ -313,22 +390,48 @@ namespace SQLiteToolkit
             return typeof(T).GetFields().Where(x => x.FieldType.ImplementsType<TInterface>());
         }
 
-        public static TValue GetValue<TObj, TValue>(this TObj data, string variableName)
-        {
-            return GetValue<TValue>(data, variableName, typeof(TObj));
-        }
+        //public static TValue GetValue<TObj, TValue>(this TObj data, string variableName)
+        //{
+        //    return GetValue<TObj, TValue>(data, variableName);
+        //}
 
+        //public static object GetValue<TObj>(this TObj obj, string variableName)
+        //{
+        //    return GetValue<TObj>(obj, variableName);
+        //}
+
+        public static TValue GetValue<TObj, TValue>(this TObj obj, string variableName)
+        {
+            return (TValue)GetValue(obj, variableName);
+        }
         public static object GetValue<TObj>(this TObj obj, string variableName)
         {
-            return GetValue(obj, variableName, typeof(TObj));
-        }
+            Type objType = obj as Type;
+            if (objType == null)
+            {
 
-        public static TValue GetValue<TValue>(this object obj, string variableName, Type objType)
-        {
-            return (TValue)GetValue(obj, variableName, objType);
-        }
-        public static object GetValue(this object obj, string variableName, Type objType)
-        {
+                if (obj != null)
+                {
+                    Type objT = typeof(TObj);
+
+                    if (objT != objType)
+                    {
+                        objType = objT;
+                    }
+                    else
+                    {
+
+                    }
+                }
+                else
+                {
+
+                }
+            }
+            else
+            {
+
+            }
             var fields = objType.GetFields(BindingFlags.Public | BindingFlags.Instance).Where(x => x.Name == variableName);
 
             if (fields.Count() > 0)
@@ -345,6 +448,24 @@ namespace SQLiteToolkit
                 var property = properties.First();
 
                 return property.GetValue(obj);
+            }
+
+            var staticFields = objType.GetFields(BindingFlags.Public | BindingFlags.Static).Where(x => x.Name == variableName);
+
+            if (staticFields.Count() > 0)
+            {
+                var field = staticFields.First();
+
+                return field.GetValue(null);
+            }
+
+            var staticProperties = objType.GetProperties(BindingFlags.Public | BindingFlags.Static).Where(x => x.CanRead && x.Name == variableName);
+
+            if (staticProperties.Count() > 0)
+            {
+                var property = staticProperties.First();
+
+                return property.GetValue(null);
             }
 
             return null;

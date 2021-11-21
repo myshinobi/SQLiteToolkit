@@ -13,6 +13,8 @@ namespace SQLiteToolkit
         public SQLiteConnection myConnection;
         public string DatabaseFilePath;
         public static string StaticTableName = "StaticVariables";
+
+        public static Database DefaultDatabase = null;
         public Database()
         {
 
@@ -115,17 +117,23 @@ namespace SQLiteToolkit
             }
             return q;
         }
-        public void RunQuery(string query, Action<QueryJob> onFinished)
+        public QueryJob RunQuery(string query, Action<QueryJob> onFinished)
         {
-            RunQuery(NewQuery(query), onFinished);
+            return RunQuery(NewQuery(query), onFinished);
         }
-        public void RunQuery(Query query, Action<QueryJob> onFinished)
+        public QueryJob RunQuery(Query query, Action<QueryJob> onFinished)
         {
             if (!QueryJobs.Exists(x => x.query == query))
             {
                 QueryJob queryJob = new QueryJob(this, query);
                 QueryJobs.Add(queryJob);
                 queryJob.RunThreadInBackground(onFinished);
+
+                return queryJob;
+            }
+            else
+            {
+                return QueryJobs.Find(x => x.query == query);
             }
         }
 
@@ -133,6 +141,7 @@ namespace SQLiteToolkit
         {
             return RunQuery(NewQuery(query));
         }
+
 
         public QueryJob RunQuery(Query query)
         {
@@ -161,27 +170,54 @@ namespace SQLiteToolkit
             return RecordExists(obj.TableName, new KeyValuePair<Column, object>[] { new KeyValuePair<Column, object>(obj.PrimaryKeyColumn, obj.GetId())});
         }
 
-        public bool RecordExists(string tablename, params KeyValuePair<Column, object>[] values)
+        public bool RecordExists(string tablename, params KeyValuePair<Column, object>[] keys)
         {
-            string sql = "SELECT count(1) FROM "+tablename+ " WHERE "+string.Join(" AND ", values.Select(x => x.Key.GetSQLValue(x.Value)));
+            string sql = "SELECT count(1) FROM "+tablename+ " WHERE "+string.Join(" AND ", keys.Select(x => x.Key.GetSQLValue(x.Value)));
 
             Query query = new Query(sql);
-            bool exists = false;
-            RunQuery(query, (job) =>
+            //bool exists = false;
+            QueryJob queryJob = RunQuery(query);/*, (job) =>
             {
-                exists = ((int)job.result.ScalarObject > 0);
+                exists =  ((long)job.result.ScalarObject) > 0d;
             });
 
-            return exists;
+            queryJob.WaitForResult();*/
+
+            return ((long)queryJob.result.ScalarObject) > 0d;
+        }
+
+        public DataTable GetDataTable(string tablename, params KeyValuePair<Column, object>[] keys)
+        {
+
+            string sql = "SELECT * FROM " + tablename + " WHERE " + string.Join(" AND ", keys.Select(x => x.Key.GetSQLValue(x.Value)));
+
+
+            Query query = new Query(sql);
+            QueryJob queryJob = RunQuery(query);
+            return queryJob.result.datatable;
+        }
+
+        public Column[] GetStaticTableColumns()
+        {
+
+            Column classCol = Column.Create("Class", typeof(string), true, null);
+            classCol.IsPrimaryKey = true;
+
+            Column variableCol = Column.Create("Variable", typeof(string), true, null);
+            variableCol.IsPrimaryKey = true;
+
+            Column valueCol = Column.Create("Value", typeof(object), true, null);
+
+            return new Column[] {classCol, variableCol, valueCol };
         }
 
 
-        public void TableCreate<T>() where T : ITableConverter
+        public void TableCreate<TTable>() where TTable : ITableConverter
         {
             //create my table
-            string tableName = Utilities.GetTableNameFromType<T>();
+            string tableName = Utilities.GetTableNameFromType<TTable>();
 
-            IEnumerable<Column> columns = Utilities.GetColumnsFromType<T>();
+            IEnumerable<Column> columns = Utilities.GetColumnsFromType<TTable>();
 
             var colGroups = columns.GroupBy(x => x.tableType);
             var joinColsGroup = colGroups.Where(x => x.Key == Column.TableType.Join);
@@ -200,20 +236,20 @@ namespace SQLiteToolkit
             if (!TableExists(tableName))
                 TableCreate(tableName, myCols);
 
-            Type tableType = typeof(T);
+            Type tableType = typeof(TTable);
             //create join tables
             if (hasJoinTable)
             {
                 var joinCols = joinColsGroup.First().Select(x => x);
 
-                T testTable = Utilities.CreateInstance<T>();
+                TTable testTable = Utilities.CreateInstance<TTable>();
                 if (testTable.IsIndexable())
                 {
 
                     joinCols.ForEach(joinCol =>
                     {
 
-                        IRelationship relationship = testTable.GetValue<IRelationship>(joinCol.Name, tableType);
+                        IRelationship relationship = testTable.GetValue(joinCol.Name) as IRelationship;
                         if (relationship == null)
                         {
                             relationship = (IRelationship)Utilities.CreateInstance(joinCol.type);
@@ -249,36 +285,106 @@ namespace SQLiteToolkit
             if (hasStaticCols)
             {
                 var staticCols = staticColsGroup.First().Select(x => x);
+                Column[] cols = GetStaticTableColumns();
+                Column classCol = cols[0];
+                Column variableCol = cols[1];
+                Column valueCol = cols[2];
 
                 if (!TableExists(StaticTableName))
                 {
-                    Column classCol = Column.Create<T>("Class", typeof(string), true);
-                    Column variableCol = Column.Create<T>("Variable", typeof(string), true);
-                    Column valueCol = Column.Create<T>("Value", typeof(object), true);
-                    TableCreate(StaticTableName, new Column[] { classCol, variableCol, valueCol});
+                    TableCreate(StaticTableName, cols);
                 }
 
 
-                //string className = tableType.Name;
+                string className = tableType.Name;
 
                 //staticCols.ForEach(col =>
                 //{
                 //    string variableName = col.Name;
-                //    string valueData = "";
-
-
+                //    //string valueData = "";
                 //});
+
+                KeyValuePair<Column, object> classKey = new KeyValuePair<Column, object>(classCol, className);
+
+                foreach (var col in staticCols)
+                {
+                    string variableName = col.Name;
+
+                    object value = tableType.GetValue(variableName);
+
+                    KeyValuePair<Column, object>[] keys = new KeyValuePair<Column, object>[]{
+                    classKey,
+                    new KeyValuePair<Column, object>(variableCol, variableName)
+                    };
+
+                    KeyValuePair<Column, object>[] data = new KeyValuePair<Column, object>[]
+                    {
+                        keys.ElementAt(0),
+                        keys.ElementAt(1),
+                        new KeyValuePair<Column, object>(valueCol, value)
+                    };
+
+
+
+                    if (!RecordExists(StaticTableName, keys))
+                    {
+                        //insert record
+                        Record rec = new Record(StaticTableName, data);
+                        Insert(rec);
+                    }
+                    //else
+                    //{
+
+                    //    //update record
+                    //    //Record rec = new Record(StaticTableName, data);
+                    //    //Update(rec);
+                    //}
+
+                }
+
+                //load initial data 
+                DataTable dt = GetDataTable(StaticTableName, classKey);
+                //var type = typeof(T);
+                foreach (Column col in staticCols)
+                {
+                    string variableName = col.Name;
+
+                    KeyValuePair<Column, object>[] keys = new KeyValuePair<Column, object>[]{
+                    classKey,
+                    new KeyValuePair<Column, object>(variableCol, variableName)
+                    };
+
+                    var field = tableType.GetField(variableName,System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public);
+
+                    if (field != null)
+                    {
+
+                        var row = dt.Rows.Retrieve<DataRow>(x =>
+                        {
+                            return ((string)x[variableCol.Name] == variableName);
+                        });
+
+                        var dbValue = row[valueCol.Name];
+                        var objValue = dbValue;
+                        if (dbValue.GetType() == typeof(byte[]))
+                        {
+                            var json = System.Text.Encoding.Default.GetString((byte[])dbValue);
+                            
+                            objValue = Newtonsoft.Json.JsonConvert.DeserializeObject(json, col.type);
+                        }
+                        if (dbValue.GetType() == typeof(DBNull))
+                        {
+                            objValue = null;
+                        }
+
+                        field.SetValue(null, objValue);
+                    }
+                    else
+                    {
+
+                    }
+                }
             }
-
-        }
-
-        public void LoadStaticValues()
-        {
-
-        }
-
-        public void SaveStaticValues()
-        {
 
         }
 
@@ -289,13 +395,14 @@ namespace SQLiteToolkit
 
         public void TableCreate(string tableName, IEnumerable<Column> columns)
         {
-
+            IEnumerable<Column> pks = columns.Where(x => x.IsPrimaryKey);
+            string pkDef = ", PRIMARY KEY ("+ string.Join(",", pks.Select(x => x.Name))+")";
             string sql = "CREATE TABLE " + tableName + " (";
 
 
             string sqlCols = string.Join(",", columns.Select(x => x.GetColumnDefinition()));
 
-            sql = sql + sqlCols + ")";
+            sql = sql + sqlCols +(pks.Count() > 0? pkDef:"")+ ")";
 
             Query command = NewQuery(sql);
 
@@ -328,10 +435,10 @@ namespace SQLiteToolkit
             return ((long)job.result.ScalarObject > 0);
         }
 
-        public bool ColumnExists(string tableName, string columnName)
-        {
-            return false;
-        }
+        //public bool ColumnExists(string tableName, string columnName)
+        //{
+        //    return false;
+        //}
 
         public void SaveRecord(IRecordConverter recordConverter)
         {
@@ -364,12 +471,62 @@ namespace SQLiteToolkit
 
         public void Insert(Record record)
         {
-            
+            string cols = "";
+            string vals = "";
+            bool first = true;
+            record.ForEach(cell => 
+            { 
+
+                cols += (first?"":", ")+"'"+cell.Key.Name+"'";
+                vals += (first ? "" : ", ") + cell.Key.GetSQLValue(cell.Value, true);
+                first = false;
+            });
+
+            string sql = "INSERT INTO " + record.TableName + " (" + cols + ") VALUES (" + vals + ")";
+
+            Query query = new Query(sql);
+            RunQuery(query);
+
         }
 
         public void Update(IRecordConverter recordConverter)
         {
+            Update(recordConverter.ToRecord());
+        }
 
+        public void Update(Record record)
+        {
+
+            string cols = "";
+            string vals = "";
+            bool first = true;
+            record.ForEach(cell =>
+            {
+
+                cols += (first ? "" : ", ") + "'" + cell.Key.Name + "'";
+                vals += (first ? "" : ", ") + cell.Key.GetSQLValue(cell.Value, true);
+                first = false;
+            });
+
+            var fields = record.Where(x => x.Key.IsPrimaryKey == false);
+            var keys = record.Where(x => x.Key.IsPrimaryKey);
+            
+            string sql = "UPDATE TABLE " + record.TableName + " SET "+ string.Join(", ",fields.Select(x => x.Key.GetSQLValue(x.Value)))+" WHERE "+ string.Join(" AND ",keys.Select(x => x.Key.GetSQLValue(x.Value)));
+
+            Query query = new Query(sql);
+            RunQuery(query);
+        }
+
+        public void MassUpdateStaticVariables(Type tTable, ICollection<KeyValuePair<Column, object>> data)
+        {
+            Column[] staticTableColumns = GetStaticTableColumns();
+
+            string className = tTable.Name;
+            Column classCol = staticTableColumns[0];
+            Column variablesCol = staticTableColumns[1];
+            Column valueCol = staticTableColumns[2];
+
+            string sql = "UPDATE StaticVariables SET "+ valueCol.Name+" = CASE "+data.Select(x => "WHEN "+ classCol.Name+" = "+classCol.GetSQLValue(className));
         }
 
         public TRecord LoadRecord<TRecord>(TRecord record) where TRecord : IIndexableRecordConverter
@@ -397,6 +554,9 @@ namespace SQLiteToolkit
                     OpenConnection();
                     Properties.Settings.Default.LastDatabaseFilePath = databaseFile;
                     Properties.Settings.Default.Save();
+
+                    if (DefaultDatabase == null)
+                    DefaultDatabase = this;
 
                     return true;
                 }

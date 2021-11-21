@@ -93,5 +93,19 @@ namespace SQLiteToolkit
         {
             return Utilities.ToTable(this, isStatic);
         }
+
+        public static void UpdatePublicStaticVariablesTable()
+        {
+            Type staticClass = typeof(TableConverter<T>).GenericTypeArguments[0];
+
+
+            ICollection<KeyValuePair<Column, object>> record =  SQLiteToolkit.Utilities.GetStaticVariableColumnsAndData(staticClass);
+
+            Database database = Database.DefaultDatabase;
+
+            database.MassUpdateStaticVariables(staticClass, record);
+
+        }
+
     }
 }

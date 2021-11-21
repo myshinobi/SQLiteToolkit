@@ -33,6 +33,14 @@ namespace SQLiteToolkit
             State = QueryJobState.Idle;
         }
 
+        //public void WaitForResult()
+        //{
+        //    while (State == QueryJobState.Running)
+        //    {
+        //        System.Threading.Thread.Sleep(100);
+        //    }
+        //}
+
         public void RunThreadInBackground(Action<QueryJob> onFinished)
         {
             lock (this)

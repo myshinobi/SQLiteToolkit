@@ -52,17 +52,50 @@ namespace SQLiteToolkit
             return base.GetHashCode();
         }
 
+        public static Column Create(System.Reflection.FieldInfo fieldInfo, Type tCol, Type tTable)
+        {
+            return Create(fieldInfo.Name, tCol, fieldInfo.IsStatic, tTable);
+        }
+        public static Column Create(System.Reflection.PropertyInfo propertyInfo, Type tCol, Type tTable)
+        {
+            return Create(propertyInfo.Name, tCol, propertyInfo.GetMethod.IsStatic, tTable);
+        }
 
-        public static Column Create<T>(string name, Type type, bool isStatic)
+        public static Column Create(string name, Type tCol, bool isStatic, Type tTable)
         {
             string pkName = "";
             bool isAutoInc = false;
-            if (typeof(T).ImplementsType<IIndexableRecordConverter>())
+            if (tTable != null)
             {
-                var t = (IIndexableRecordConverter)Utilities.CreateInstance<T>();
+
+                if (tTable.ImplementsType<IIndexableRecordConverter>())
+                {
+                    var t = (IIndexableRecordConverter)Utilities.CreateInstance(tTable);
+                    pkName = t.GetPrimaryKey();
+
+                    if (t is IAutoIndexableRecordConverter && pkName == name)
+                    {
+
+                        isAutoInc = true;
+                    }
+
+                }
+            }
+            bool isPK = (name == pkName);
+            bool isFK = tCol.ImplementsType<IRelationship>();
+            return Create(name, tCol, isPK, isFK, isAutoInc, isStatic);
+        }
+
+        public static Column Create<TTable>(string name, Type tCol, bool isStatic)
+        {
+            string pkName = "";
+            bool isAutoInc = false;
+            if (typeof(TTable).ImplementsType<IIndexableRecordConverter>())
+            {
+                var t = (IIndexableRecordConverter)Utilities.CreateInstance<TTable>();
                 pkName = t.GetPrimaryKey();
 
-                if (t is AutoIndexableRecordConverter<T> && pkName == name)
+                if (t is AutoIndexableRecordConverter<TTable> && pkName == name)
                 {
                    
                     isAutoInc = true;
@@ -70,8 +103,8 @@ namespace SQLiteToolkit
                 
             }
             bool isPK = (name == pkName);
-            bool isFK = type.ImplementsType<IRelationship>();
-            return Create(name, type, isPK, isFK, isAutoInc, isStatic);
+            bool isFK = tCol.ImplementsType<IRelationship>();
+            return Create(name, tCol, isPK, isFK, isAutoInc, isStatic);
         }
 
         //public static Column Create<T>(string name, T defaultValue, bool isStatic)
@@ -98,57 +131,78 @@ namespace SQLiteToolkit
 
 
 
-            //var sqlType = col.GetSQLDataType();
-
-            //switch (sqlType)
-            //{
-            //    case SQLDataTypes.TEXT:
-            //        col.DefaultValue = "";
-            //        break;
-            //    case SQLDataTypes.INTEGER:
-            //        col.DefaultValue = 0;
-            //        break;
-            //    case SQLDataTypes.REAL:
-            //        col.DefaultValue = 0d;
-            //        break;
-            //    case SQLDataTypes.NUMERIC:
-            //        col.DefaultValue = 0m;
-            //        break;
-
-            //    default:
-            //        col.DefaultValue = null;
-            //        break;
-            //}
-
 
             return col;
         }
 
         public string GetColumnDefinition()
         {
-            return Name +" "+ GetSQLDataType() + (IsPrimaryKey ? " PRIMARY KEY" : "") + (NotNull ? " NOT NULL" : "");
+            // + (IsPrimaryKey ? " PRIMARY KEY" : "")
+            return Name +" "+ GetSQLDataType() + (NotNull ? " NOT NULL" : "");
         }
         
-        public string GetSQLValue(object value)
+        public string GetSQLValue(object value, bool onlyValue = false)
         {
             string prefix = Name;
 
             if (value == null)
             {
-                prefix += " IS NULL";
 
-                return prefix;
+                if (onlyValue)
+                {
+                    return "NULL";
+                }
+                else
+                {
+                    return prefix + " IS NULL"; ;
+
+                }
+
             }
             else
             {
                 prefix += " = ";
-                switch (GetSQLDataType())
-                {
-                    case SQLDataTypes.TEXT:
-                        return prefix + "'" + value.ToString() + "'";
+                string val = "";
+                //switch (GetSQLDataType())
+                //{
+                    
 
-                    default:
-                        return prefix + value.ToString();
+                //    case SQLDataTypes.TEXT:
+                //        return prefix + "'" + value.ToString() + "'";
+
+                //    default:
+                //        return prefix + value.ToString();
+                //}
+
+                SQLDataTypes dataType = GetSQLDataType();
+
+                if (dataType == SQLDataTypes.BLOB || dataType == SQLDataTypes.TEXT)
+                {
+                    //bool isJSON = false;
+                    //Type valType = value.GetType();
+                    if (value is string)
+                    {
+                         val = "'" + value.ToString() + "'";
+                    }
+                    else
+                    {
+                        string json = Newtonsoft.Json.JsonConvert.SerializeObject(value);
+
+                        val = "'" + json + "'";
+                    }
+                }
+                else
+                {
+                    val = value.ToString();
+                }
+
+                if (onlyValue)
+                {
+                    return val;
+                }
+                else 
+                {
+                    return prefix + val;
                 }
             }
 

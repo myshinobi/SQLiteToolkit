@@ -23,7 +23,7 @@ namespace SQLiteToolkit
     {
         //private Dictionary<Column, object> data = new Dictionary<Column, object>();
         //public object this[Column key] { get => data[key]; }
-
+        public string TableName;
         public object this[PropertyInfo propertyInfo]
         {
             get
@@ -54,10 +54,10 @@ namespace SQLiteToolkit
             }
         }
 
-        public Record(IEnumerable<KeyValuePair<Column, object>> data, Type recordType)
+        public Record(string tablename, IEnumerable<KeyValuePair<Column, object>> data)
         {
             var dict = data.ToDictionary(x=> x.Key, x=>x.Value);
-
+            this.TableName = tablename;
             dict.ForEach(page =>
             {
                 if (!ContainsKey(page.Key))
@@ -67,8 +67,9 @@ namespace SQLiteToolkit
             });
         }
 
-        public Record(Type recordType,params KeyValuePair<Column, object>[] data)
+        public Record(string tablename, params KeyValuePair<Column, object>[] data)
         {
+            this.TableName = tablename;
             var dict = data.ToDictionary(x => x.Key, x => x.Value);
 
             dict.ForEach(page =>

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LibraryofAlexandria;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -82,8 +83,12 @@ namespace SQLiteToolkit
 
                 DataGridView dataGridView = new DataGridView();
                 dataGridView.ReadOnly = true;
+                dataGridView.AutoGenerateColumns = false;
                 dataGridView.AllowUserToAddRows = false;
                 dataGridView.Dock = DockStyle.Fill;
+                dataGridView.CellFormatting += dataGridView_CellFormatting;
+                dataGridView.CellParsing += dataGridView_CellParsing;
+
                 splitContainer.Panel2.Controls.Add(dataGridView);
 
                 StatusStrip statusStrip = new StatusStrip();
@@ -99,6 +104,31 @@ namespace SQLiteToolkit
 
                 tabControl1.TabPages.Insert(tabControl1.TabPages.Count - 1, newtab);
                 tabControl1.SelectedTab = newtab;
+            }
+        }
+        void dataGridView_CellParsing(object sender, DataGridViewCellParsingEventArgs e)
+        {
+
+            DataGridView dataGridView = (DataGridView)sender;
+
+        }
+        private void dataGridView_CellFormatting(object sender, DataGridViewCellFormattingEventArgs e)
+        {
+            // If the column is the Artist column, check the
+            // value.
+            DataGridView dataGridView = (DataGridView)sender;
+
+
+            if (dataGridView.Columns[e.ColumnIndex].ValueType == typeof(byte[]))
+            {
+                if (e.Value != DBNull.Value && e.Value != null)
+                {
+                    //dataGridView.Columns[e.ColumnIndex].ValueType =  
+                    e.Value = Encoding.UTF8.GetString((byte[])e.Value);
+                    e.FormattingApplied = true;
+
+                }
+                
             }
         }
 
@@ -147,7 +177,7 @@ namespace SQLiteToolkit
 
         }
 
-        public void ExecuteQuery()
+        public QueryJob ExecuteQuery()
         {
             SplitContainer splitContainer = GetControlsOfType<SplitContainer>(tabControl1.SelectedTab).First();
             TextBox textBox = GetControlsOfType<TextBox>(splitContainer.Panel1).First();
@@ -159,7 +189,9 @@ namespace SQLiteToolkit
             RegisterTimerLabel(statusLabel, DateTime.UtcNow);
             Query query = database.NewQuery(queryString);
 
-            database.RunQuery(query, (job) => ShowQueryResults(dataGridView, label, statusLabel, job));
+            return database.RunQuery(query, (job) => ShowQueryResults(dataGridView, label, statusLabel, job));
+
+
         }
         
         public string GetTimeElapsedText(DateTime startTimeUTC)
@@ -219,8 +251,26 @@ namespace SQLiteToolkit
 
                 if (queryJob.result.datatable != null)
                 {
+
+
                     dataGridView.DataSource = queryJob.result.datatable;
                     databaseMessage.Visible = false;
+
+                    dataGridView.Columns.Clear();
+
+
+                    queryJob.result.datatable.Columns.ForEach<DataColumn>(col => {
+
+                        var column = new DataGridViewTextBoxColumn();
+                        column.Name = col.ColumnName;
+                        column.HeaderText = col.ColumnName;
+                        column.DataPropertyName = col.ColumnName;
+                        
+
+                        dataGridView.Columns.Add(column);
+                    
+                    });
+                    
                     dataGridView.Visible = true;
                 }
                 else
